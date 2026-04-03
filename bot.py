@@ -25,6 +25,8 @@ class XeneaBot:
         self.chain_id = 1096
         self.symbol = "TXENE"
         self.explorer_url = "https://xeneascan.com/tx"
+        self.max_retries = 3
+        self.retry_delay = 5
 
     def get_wib_time(self):
         wib = pytz.timezone('Asia/Jakarta')
@@ -124,6 +126,19 @@ class XeneaBot:
             except KeyboardInterrupt:
                 print(f"\n{Fore.RED}Program terminated by user.{Style.RESET_ALL}")
                 exit(0)
+
+    def get_gas_price_with_bump(self, w3, bump_percent=10):
+        gas_price = w3.eth.gas_price
+        bumped = int(gas_price * (1 + bump_percent / 100))
+        return bumped
+
+    def send_transaction(self, w3, tx, formatted_pk, attempt=1):
+        try:
+            signed_tx = w3.eth.account.sign_transaction(tx, formatted_pk)
+            tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+            return w3.to_hex(tx_hash), None
+        except Exception as e:
+            return None, str(e)
 
     def run(self):
         self.print_banner()
@@ -230,7 +245,7 @@ class XeneaBot:
                             time.sleep(2)
                         continue
 
-                    base_nonce = w3.eth.get_transaction_count(sender_address)
+                    base_nonce = w3.eth.get_transaction_count(sender_address, 'pending')
                     gas_price = w3.eth.gas_price
                     gas_price_gwei = float(w3.from_wei(gas_price, 'gwei'))
                     self.log(f"Gas Price: {gas_price_gwei:.4f} Gwei", "INFO")
@@ -251,29 +266,54 @@ class XeneaBot:
                         self.log(f"To: {recipient_checksum}", "INFO")
                         self.log(f"Amount: {amount_to_send} {self.symbol}", "INFO")
 
-                        tx = {
-                            'nonce': base_nonce + tx_idx,
-                            'to': recipient_checksum,
-                            'value': w3.to_wei(amount_to_send, 'ether'),
-                            'gas': 21000,
-                            'gasPrice': gas_price,
-                            'chainId': self.chain_id
-                        }
+                        tx_nonce = base_nonce + tx_idx
+                        tx_success = False
 
-                        signed_tx = w3.eth.account.sign_transaction(tx, formatted_pk)
-                        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-                        tx_hash_hex = w3.to_hex(tx_hash)
+                        for attempt in range(1, self.max_retries + 1):
+                            try:
+                                current_gas = w3.eth.gas_price
+                                if attempt > 1:
+                                    bump = (attempt - 1) * 15
+                                    current_gas = int(current_gas * (1 + bump / 100))
+                                    current_gas_gwei = float(w3.from_wei(current_gas, 'gwei'))
+                                    self.log(f"Retry {attempt}/{self.max_retries} | Gas bumped to {current_gas_gwei:.4f} Gwei", "WARNING")
+                                    time.sleep(self.retry_delay)
 
-                        balance_eth -= amount_to_send
-                        account_total_sent += amount_to_send
+                                tx = {
+                                    'nonce': tx_nonce,
+                                    'to': recipient_checksum,
+                                    'value': w3.to_wei(amount_to_send, 'ether'),
+                                    'gas': 21000,
+                                    'gasPrice': current_gas,
+                                    'chainId': self.chain_id
+                                }
 
-                        time_str = self.get_wib_time()
-                        print(f"[{time_str}] {Fore.GREEN}[SUCCESS] TX Hash: {tx_hash_hex}{Style.RESET_ALL}")
-                        print(f"[{time_str}] {Fore.GREEN}[SUCCESS] Explorer: {self.explorer_url}/{tx_hash_hex}{Style.RESET_ALL}")
-                        print(f"[{time_str}] {Fore.GREEN}[SUCCESS] Est. Balance: ~{balance_eth:.6f} {self.symbol}{Style.RESET_ALL}")
+                                signed_tx = w3.eth.account.sign_transaction(tx, formatted_pk)
+                                tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+                                tx_hash_hex = w3.to_hex(tx_hash)
 
-                        account_success_tx += 1
-                        total_tx_success += 1
+                                balance_eth -= amount_to_send
+                                account_total_sent += amount_to_send
+
+                                time_str = self.get_wib_time()
+                                print(f"[{time_str}] {Fore.GREEN}[SUCCESS] TX Hash: {tx_hash_hex}{Style.RESET_ALL}")
+                                print(f"[{time_str}] {Fore.GREEN}[SUCCESS] Explorer: {self.explorer_url}/{tx_hash_hex}{Style.RESET_ALL}")
+                                print(f"[{time_str}] {Fore.GREEN}[SUCCESS] Est. Balance: ~{balance_eth:.6f} {self.symbol}{Style.RESET_ALL}")
+
+                                account_success_tx += 1
+                                total_tx_success += 1
+                                tx_success = True
+                                break
+
+                            except Exception as e:
+                                err_msg = str(e)
+                                if attempt < self.max_retries:
+                                    self.log(f"TX Failed (Attempt {attempt}/{self.max_retries}): {err_msg}", "WARNING")
+                                else:
+                                    self.log(f"TX Failed after {self.max_retries} attempts: {err_msg}", "ERROR")
+
+                        if not tx_success:
+                            self.log(f"Skipping TX {tx_idx+1}, moving to next...", "WARNING")
 
                         if tx_idx < tx_count - 1:
                             self.random_delay(3, 10)
@@ -287,6 +327,7 @@ class XeneaBot:
 
                 except Exception as e:
                     self.log(f"Exception Occurred: {str(e)}", "ERROR")
+                    self.log("Skipping account, moving to next...", "WARNING")
 
                 if i < total_accounts - 1:
                     print(f"{Fore.WHITE}............................................................{Style.RESET_ALL}")

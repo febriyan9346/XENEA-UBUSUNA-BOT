@@ -1,4 +1,2 @@
-# Masukkan alamat tujuan di sini, satu per baris (opsional)
-# Contoh:
-# 0xRecipientAddress1
-# 0xRecipientAddress2
+0xRecipientAddress1
+0xRecipientAddress2

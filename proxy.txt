@@ -1,0 +1,5 @@
+# Masukkan proxy di sini, satu per baris (opsional)
+# Format: http://user:pass@ip:port
+# Contoh:
+# http://user:pass@192.168.1.1:8080
+# http://192.168.1.2:3128

@@ -1,4 +1,2 @@
-# Masukkan private key kamu di sini, satu per baris
-# Contoh:
-# 0xYOUR_PRIVATE_KEY_1
-# 0xYOUR_PRIVATE_KEY_2
+0xYOUR_PRIVATE_KEY_1
+0xYOUR_PRIVATE_KEY_2

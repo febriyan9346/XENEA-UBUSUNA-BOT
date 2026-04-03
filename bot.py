@@ -239,13 +239,17 @@ class XeneaBot:
                     account_total_sent = 0.0
 
                     for tx_idx in range(tx_count):
+                        print(f"{Fore.CYAN}------------------------------------------------------------{Style.RESET_ALL}")
+                        self.log(f"TX {tx_idx+1}/{tx_count}", "INFO")
+
                         if target_choice == '2':
                             raw_recipient = self.get_random_address()
                         else:
                             raw_recipient = next(address_cycle)
 
                         recipient_checksum = w3.to_checksum_address(raw_recipient)
-                        self.log(f"Processing TX {tx_idx+1}/{tx_count} to {recipient_checksum}", "INFO")
+                        self.log(f"To: {recipient_checksum}", "INFO")
+                        self.log(f"Amount: {amount_to_send} {self.symbol}", "INFO")
 
                         tx = {
                             'nonce': base_nonce + tx_idx,
@@ -274,6 +278,7 @@ class XeneaBot:
                         if tx_idx < tx_count - 1:
                             self.random_delay(3, 10)
 
+                    print(f"{Fore.CYAN}------------------------------------------------------------{Style.RESET_ALL}")
                     total_sent_all += account_total_sent
                     self.log(f"Account Summary: {account_success_tx}/{tx_count} TX Success | Total Sent: {account_total_sent:.6f} {self.symbol}", "INFO")
 
